@@ -4,12 +4,15 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from typing import List
 
+from models.menu import MenuItem
 from core.database import get_db
-from core.dependencies import get_current_user, RoleChecker
+from core.dependencies import RoleChecker, get_current_user
 from models.order import Order, OrderItem, OrderStatus
 from schemas.order import OrderCreate, OrderRead, OrderStatusUpdate
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+is_staff = RoleChecker(["admin", "manager", "staff"])
 
 @router.post("/", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
 async def create_order(
