@@ -7,6 +7,7 @@ from core.database import get_db
 from core.security import verify_password, get_password_hash, create_access_token
 from models.user import User
 from schemas.user import UserCreate, UserRead, Token
+from core.dependencies import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -41,3 +42,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
     
     access_token = create_access_token(subject=user.username)
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/me", response_model=UserRead)
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Получение информации о текущем пользователе (требует авторизации)"""
+    return current_user
