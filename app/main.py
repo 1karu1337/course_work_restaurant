@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routers import auth, restaurant, table, menu, ingredient, order, export
+from routers import auth, restaurant, table, menu, ingredient, order, export, admin
 
 app = FastAPI(title="Restaurant Network API")
 
@@ -10,6 +10,7 @@ app.include_router(menu.router)
 app.include_router(ingredient.router)
 app.include_router(order.router)
 app.include_router(export.router)
+app.include_router(admin.router)
 
 @app.get("/")
 async def root():
