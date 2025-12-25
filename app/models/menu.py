@@ -9,7 +9,6 @@ class Category(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     
-    # Связь: Одна категория -> Много блюд
     items: Mapped[List["MenuItem"]] = relationship("MenuItem", back_populates="category", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
@@ -24,11 +23,13 @@ class MenuItem(Base):
     price: Mapped[float] = mapped_column(Float, nullable=False)
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
     
-    # Внешний ключ на категорию
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), nullable=False)
     
-    # Обратная связь
     category: Mapped["Category"] = relationship("Category", back_populates="items")
 
     def __repr__(self) -> str:
         return f"<MenuItem(name={self.name}, price={self.price})>"
+    
+    ingredient_links: Mapped[list["MenuItemIngredient"]] = relationship(
+        "MenuItemIngredient", back_populates="menu_item", cascade="all, delete-orphan"
+    )
