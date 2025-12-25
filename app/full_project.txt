@@ -1,0 +1,1423 @@
+PROJECT STRUCTURE:
+==================================================
+📁 app/
+    📄 __init__.py
+    📄 main.py
+    📄 seed_all.py
+    📄 1.py
+    📁 core/
+        📄 database.py
+        📄 dependencies.py
+        📄 __init__.py
+        📄 security.py
+        📄 config.py
+    📁 schemas/
+        📄 menu.py
+        📄 __init__.py
+        📄 user.py
+        📄 table.py
+        📄 order.py
+        📄 restaurant.py
+        📄 ingredient.py
+    📁 routers/
+        📄 menu.py
+        📄 export.py
+        📄 auth.py
+        📄 __init__.py
+        📄 admin.py
+        📄 table.py
+        📄 order.py
+        📄 restaurant.py
+        📄 ingredient.py
+    📁 models/
+        📄 menu.py
+        📄 __init__.py
+        📄 user.py
+        📄 order.py
+        📄 restaurant.py
+        📄 ingredient.py
+    📁 services/
+        📄 export_service.py
+        📄 backup_service.py
+==================================================
+
+
+################################################################################
+FILE: __init__.py
+################################################################################
+
+
+
+
+################################################################################
+FILE: main.py
+################################################################################
+
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from routers import auth, restaurant, table, menu, ingredient, order, export, admin
+
+app = FastAPI(title="Restaurant Network API")
+
+app.include_router(auth.router)
+app.include_router(restaurant.router)
+app.include_router(table.router)
+app.include_router(menu.router)
+app.include_router(ingredient.router)
+app.include_router(order.router)
+app.include_router(export.router)
+app.include_router(admin.router)
+
+app.mount("/static", StaticFiles(directory="../static"), name="static")
+
+@app.get("/")
+async def read_index():
+    return FileResponse("../static/index.html")
+
+
+################################################################################
+FILE: seed_all.py
+################################################################################
+
+import asyncio
+import sys
+from os.path import dirname, abspath
+
+# Добавляем путь, чтобы импорты работали без приставки app
+sys.path.insert(0, dirname(abspath(__file__)))
+
+from core.database import async_session
+from core.security import get_password_hash
+from models.user import Role, User
+from models.restaurant import Restaurant, Table
+from models.menu import Category, MenuItem
+from models.ingredient import Ingredient, MenuItemIngredient
+from sqlalchemy import select
+
+async def seed():
+    async with async_session() as session:
+        print("🚀 Начинаем наполнение базы данных...")
+
+        # 1. Создание ролей
+        roles_data = [
+            Role(id=1, name="customer", description="Клиент"),
+            Role(id=2, name="staff", description="Официант"),
+            Role(id=3, name="manager", description="Менеджер"),
+            Role(id=4, name="admin", description="Администратор")
+        ]
+        for r in roles_data:
+            await session.merge(r)
+        await session.commit()
+        print("✅ Роли созданы.")
+
+        # 2. Создание пользователей (Пароль = Логин)
+        users_data = [
+            ("admin", "admin@resto.ru", 4),
+            ("manager", "manager@resto.ru", 3),
+            ("staff", "staff@resto.ru", 2),
+            ("user", "user@resto.ru", 1),
+        ]
+        for username, email, role_id in users_data:
+            user_check = await session.execute(select(User).where(User.username == username))
+            if not user_check.scalars().first():
+                new_user = User(
+                    username=username,
+                    email=email,
+                    hashed_password=get_password_hash(username), # Пароль как логин
+                    role_id=role_id
+                )
+                session.add(new_user)
+        await session.commit()
+        print("✅ Пользователи созданы (пароли совпадают с логинами).")
+
+        # 3. Создание ресторана и столиков
+        rest = Restaurant(name="Gourmet Plaza", address="ул. Пушкина, 10", phone="+79991234567")
+        session.add(rest)
+        await session.flush()
+
+        tables = [Table(number=i, capacity=4, restaurant_id=rest.id) for i in range(1, 6)]
+        session.add_all(tables)
+        print("✅ Ресторан и столики добавлены.")
+
+        # 4. Категории и Меню
+        cat1 = Category(name="Пицца")
+        cat2 = Category(name="Напитки")
+        session.add_all([cat1, cat2])
+        await session.flush()
+
+        items = [
+            MenuItem(name="Маргарита", price=450.0, category_id=cat1.id, is_available=True),
+            MenuItem(name="Пепперони", price=550.0, category_id=cat1.id, is_available=True),
+            MenuItem(name="Кола 0.5", price=120.0, category_id=cat2.id, is_available=True),
+        ]
+        session.add_all(items)
+        print("✅ Меню заполнено.")
+
+        # 5. Ингредиенты
+        ing1 = Ingredient(name="Мука", unit="кг", stock_quantity=50.0)
+        ing2 = Ingredient(name="Сыр Моцарелла", unit="кг", stock_quantity=20.0)
+        session.add_all([ing1, ing2])
+        
+        await session.commit()
+        print("🏁 Наполнение завершено успешно!")
+
+if __name__ == "__main__":
+    asyncio.run(seed())
+
+
+################################################################################
+FILE: 1.py
+################################################################################
+
+import os
+from pathlib import Path
+
+# Конфигурация
+OUTPUT_FILE = "full_project.txt"
+EXCLUDE_DIRS = {
+    '.git', '__pycache__', '.venv', 'venv', 'env', 
+    '.idea', '.vscode', 'node_modules', 'dist', 'build'
+}
+EXCLUDE_FILES = {OUTPUT_FILE, '.DS_Store', 'package-lock.json'}
+# Список расширений, которые стоит включать (можно дополнить)
+ALLOWED_EXTENSIONS = {
+    '.py', '.txt', '.md', '.json', '.yaml', '.yml', 
+    '.html', '.css', '.js', '.sql', '.ini', '.cfg'
+}
+
+def get_project_structure(root_dir):
+    """Генерирует строковое представление древовидной структуры проекта."""
+    structure = []
+    for root, dirs, files in os.walk(root_dir):
+        # Удаляем исключаемые папки из обхода
+        dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+        
+        level = root.replace(root_dir, '').count(os.sep)
+        indent = ' ' * 4 * level
+        folder_name = os.path.basename(root)
+        if folder_name:
+            structure.append(f"{indent}📁 {folder_name}/")
+        
+        sub_indent = ' ' * 4 * (level + 1)
+        for f in files:
+            if f not in EXCLUDE_FILES:
+                structure.append(f"{sub_indent}📄 {f}")
+    return "\n".join(structure)
+
+def main():
+    root_dir = os.getcwd()
+    output_path = Path(root_dir) / OUTPUT_FILE
+
+    with open(output_path, 'w', encoding='utf-8') as outfile:
+        # 1. Записываем заголовок и структуру
+        outfile.write(f"PROJECT STRUCTURE:\n")
+        outfile.write("=" * 50 + "\n")
+        outfile.write(get_project_structure(root_dir))
+        outfile.write("\n" + "=" * 50 + "\n\n")
+
+        # 2. Обходим файлы и записываем их содержимое
+        for root, dirs, files in os.walk(root_dir):
+            dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+            
+            for file in files:
+                if file in EXCLUDE_FILES:
+                    continue
+                
+                file_path = Path(root) / file
+                relative_path = file_path.relative_to(root_dir)
+
+                # Проверяем расширение
+                if file_path.suffix.lower() in ALLOWED_EXTENSIONS:
+                    outfile.write(f"\n{'#'*80}\n")
+                    outfile.write(f"FILE: {relative_path}\n")
+                    outfile.write(f"{'#'*80}\n\n")
+                    
+                    try:
+                        with open(file_path, 'r', encoding='utf-8', errors='replace') as infile:
+                            outfile.write(infile.read())
+                    except Exception as e:
+                        outfile.write(f"[Ошибка при чтении файла: {e}]\n")
+                    
+                    outfile.write("\n\n")
+
+    print(f"Готово! Весь проект сохранен в файл: {OUTPUT_FILE}")
+
+if __name__ == "__main__":
+    main()
+
+
+
+################################################################################
+FILE: core/database.py
+################################################################################
+
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import DeclarativeBase
+from core.config import settings  # Убрали app.
+
+engine = create_async_engine(settings.DATABASE_URL, future=True, echo=True)
+async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+class Base(DeclarativeBase):
+    pass
+
+async def get_db():
+    async with async_session() as session:
+        yield session
+
+
+################################################################################
+FILE: core/dependencies.py
+################################################################################
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+
+from core.database import get_db
+from core.config import settings
+from models.user import User, Role
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme), 
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    result = await db.execute(
+        select(User).where(User.username == username)
+    )
+    user = result.scalars().first()
+
+    if user is None:
+        raise credentials_exception
+    return user
+
+class RoleChecker:
+    def __init__(self, allowed_roles: list[str]):
+        self.allowed_roles = allowed_roles
+
+    async def __call__(
+        self, 
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+    ):
+        result = await db.execute(select(Role).where(Role.id == current_user.role_id))
+        role = result.scalars().first()
+        
+        if role.name not in self.allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="У вас недостаточно прав для выполнения этого действия"
+            )
+        return current_user
+
+
+################################################################################
+FILE: core/__init__.py
+################################################################################
+
+
+
+
+################################################################################
+FILE: core/security.py
+################################################################################
+
+import bcrypt
+from datetime import datetime, timedelta, timezone
+from typing import Any, Union
+from jose import jwt
+from core.config import settings
+
+def create_access_token(subject: Union[str, Any], expires_delta: timedelta = None) -> str:
+    """Создание JWT токена"""
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
+    to_encode = {"exp": expire, "sub": str(subject)}
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Проверка совпадения пароля и хеша"""
+    # bcrypt работает с байтами, поэтому переводим строки в utf-8
+    password_bytes = plain_password.encode('utf-8')
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(password_bytes, hashed_bytes)
+
+def get_password_hash(password: str) -> str:
+    """Генерация хеша из пароля"""
+    # Генерируем "соль" и хешируем
+    password_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8') # Возвращаем строку для хранения в БД
+
+
+################################################################################
+FILE: core/config.py
+################################################################################
+
+import os
+from pathlib import Path
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Находим путь к папке, где лежит этот файл (app/core)
+# .parent.parent.parent — это выход на уровень корня проекта (course_work_restaurant)
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+ENV_FILE = os.path.join(BASE_DIR, ".env")
+
+class Settings(BaseSettings):
+    DATABASE_URL: str
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
+    # Явно указываем абсолютный путь к .env
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE, 
+        env_file_encoding='utf-8',
+        extra="ignore" # Игнорировать лишние переменные в .env
+    )
+
+try:
+    settings = Settings()
+except Exception as e:
+    print(f"ОШИБКА: Не удалось загрузить настройки. Проверь файл {ENV_FILE}")
+    raise e
+
+
+################################################################################
+FILE: schemas/menu.py
+################################################################################
+
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List
+
+class CategoryBase(BaseModel):
+    name: str
+
+class CategoryCreate(CategoryBase):
+    pass
+
+class CategoryRead(CategoryBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+class MenuItemBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: float
+    is_available: bool = True
+    category_id: int
+
+class MenuItemCreate(MenuItemBase):
+    pass
+
+class MenuItemRead(MenuItemBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+################################################################################
+FILE: schemas/__init__.py
+################################################################################
+
+
+
+
+################################################################################
+FILE: schemas/user.py
+################################################################################
+
+from pydantic import BaseModel, EmailStr, ConfigDict
+from typing import Optional
+
+class UserBase(BaseModel):
+    username: str
+    email: EmailStr
+
+class UserCreate(UserBase):
+    password: str
+    role_id: int = 1
+
+class UserRead(UserBase):
+    id: int
+    role_id: int
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+
+################################################################################
+FILE: schemas/table.py
+################################################################################
+
+from pydantic import BaseModel, ConfigDict
+
+class TableBase(BaseModel):
+    number: int
+    capacity: int
+    restaurant_id: int
+
+class TableCreate(TableBase):
+    pass
+
+class TableRead(TableBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+################################################################################
+FILE: schemas/order.py
+################################################################################
+
+from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+from typing import List, Optional
+from models.order import OrderStatus
+
+class OrderItemBase(BaseModel):
+    menu_item_id: int
+    quantity: int
+
+class OrderCreate(BaseModel):
+    table_id: Optional[int] = None
+    items: List[OrderItemBase]
+
+class OrderItemRead(BaseModel):
+    menu_item_id: int
+    quantity: int
+    price_at_order: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+class OrderRead(BaseModel):
+    id: int
+    user_id: int
+    table_id: Optional[int]
+    status: OrderStatus
+    created_at: datetime
+    items: List[OrderItemRead]
+
+    model_config = ConfigDict(from_attributes=True)
+
+class OrderStatusUpdate(BaseModel):
+    status: OrderStatus
+
+
+################################################################################
+FILE: schemas/restaurant.py
+################################################################################
+
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
+
+class RestaurantBase(BaseModel):
+    name: str
+    address: str
+    phone: Optional[str] = None
+
+class RestaurantCreate(RestaurantBase):
+    pass
+
+class RestaurantRead(RestaurantBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+################################################################################
+FILE: schemas/ingredient.py
+################################################################################
+
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List
+
+class IngredientBase(BaseModel):
+    name: str
+    unit: str
+    stock_quantity: float = 0.0
+
+class IngredientCreate(IngredientBase):
+    pass
+
+class IngredientRead(IngredientBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+class RecipeLinkCreate(BaseModel):
+    menu_item_id: int
+    ingredient_id: int
+    amount: float
+
+class RecipeRead(BaseModel):
+    ingredient_id: int
+    ingredient_name: str
+    amount: float
+    unit: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+################################################################################
+FILE: routers/menu.py
+################################################################################
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from typing import List, Optional
+
+from core.database import get_db
+from core.dependencies import RoleChecker
+from models.menu import Category, MenuItem
+from schemas.menu import (
+    CategoryCreate, CategoryRead, 
+    MenuItemCreate, MenuItemRead
+)
+
+router = APIRouter(prefix="/menu", tags=["menu"])
+
+is_staff = RoleChecker(["admin", "manager"])
+
+@router.get("/categories", response_model=List[CategoryRead])
+async def list_categories(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Category))
+    return result.scalars().all()
+
+@router.post("/categories", response_model=CategoryRead)
+async def create_category(
+    cat_in: CategoryCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    new_cat = Category(**cat_in.model_dump())
+    db.add(new_cat)
+    await db.commit()
+    await db.refresh(new_cat)
+    return new_cat
+
+@router.get("/items", response_model=List[MenuItemRead])
+async def list_items(
+    category_id: Optional[int] = None, 
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(MenuItem)
+    if category_id:
+        query = query.where(MenuItem.category_id == category_id)
+    
+    result = await db.execute(query)
+    return result.scalars().all()
+
+@router.post("/items", response_model=MenuItemRead)
+async def create_item(
+    item_in: MenuItemCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    cat_res = await db.execute(select(Category).where(Category.id == item_in.category_id))
+    if not cat_res.scalars().first():
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    new_item = MenuItem(**item_in.model_dump())
+    db.add(new_item)
+    await db.commit()
+    await db.refresh(new_item)
+    return new_item
+
+@router.patch("/items/{item_id}", response_model=MenuItemRead)
+async def update_item_availability(
+    item_id: int, 
+    is_available: bool,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    result = await db.execute(select(MenuItem).where(MenuItem.id == item_id))
+    item = result.scalars().first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    item.is_available = is_available
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+################################################################################
+FILE: routers/export.py
+################################################################################
+
+from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi.responses import Response
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from typing import Literal
+
+from core.database import get_db
+from core.dependencies import RoleChecker
+from models.menu import MenuItem
+from services import export_service
+
+router = APIRouter(prefix="/export", tags=["export"])
+
+is_staff = RoleChecker(["admin", "manager"])
+
+@router.get("/menu")
+async def export_menu(
+    format: Literal["json", "csv"] = Query(..., description="Формат выгрузки"),
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    result = await db.execute(select(MenuItem))
+    items = result.scalars().all()
+    
+    data = [
+        {
+            "id": i.id,
+            "name": i.name,
+            "price": i.price,
+            "available": i.is_available,
+            "category_id": i.category_id
+        } for i in items
+    ]
+
+    if format == "json":
+        content = export_service.to_json(data)
+        media_type = "application/json"
+        filename = "menu_export.json"
+    else:
+        content = export_service.to_csv(data)
+        media_type = "text/csv"
+        filename = "menu_export.csv"
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
+################################################################################
+FILE: routers/auth.py
+################################################################################
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+
+from core.database import get_db
+from core.security import verify_password, get_password_hash, create_access_token
+from models.user import User
+from schemas.user import UserCreate, UserRead, Token
+from core.dependencies import get_current_user
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+@router.post("/register", response_model=UserRead)
+async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.username == user_in.username))
+    if result.scalars().first():
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    new_user = User(
+        username=user_in.username,
+        email=user_in.email,
+        hashed_password=get_password_hash(user_in.password),
+        role_id=user_in.role_id
+    )
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+    return new_user
+
+@router.post("/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.username == form_data.username))
+    user = result.scalars().first()
+    
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token = create_access_token(subject=user.username)
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/me", response_model=UserRead)
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Получение информации о текущем пользователе (требует авторизации)"""
+    return current_user
+
+
+################################################################################
+FILE: routers/__init__.py
+################################################################################
+
+
+
+
+################################################################################
+FILE: routers/admin.py
+################################################################################
+
+from fastapi import APIRouter, Depends, HTTPException
+from core.dependencies import RoleChecker
+from services import backup_service
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+is_admin = RoleChecker(["admin"])
+
+@router.post("/backup")
+async def trigger_backup(current_user = Depends(is_admin)):
+    """Запуск создания резервной копии БД (Требование №3)"""
+    result = backup_service.create_db_backup()
+    
+    if result["status"] == "error":
+        raise HTTPException(status_code=500, detail=result["message"])
+    
+    return result
+
+
+################################################################################
+FILE: routers/table.py
+################################################################################
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from typing import List
+
+from core.database import get_db
+from core.dependencies import RoleChecker
+from models.restaurant import Table, Restaurant
+from schemas.table import TableCreate, TableRead
+
+router = APIRouter(prefix="/tables", tags=["tables"])
+
+is_staff = RoleChecker(["admin", "manager"])
+
+@router.get("/", response_model=List[TableRead])
+async def list_tables(restaurant_id: int = None, db: AsyncSession = Depends(get_db)):
+    query = select(Table)
+    if restaurant_id:
+        query = query.where(Table.restaurant_id == restaurant_id)
+    
+    result = await db.execute(query)
+    return result.scalars().all()
+
+@router.post("/", response_model=TableRead, status_code=status.HTTP_201_CREATED)
+async def create_table(
+    table_in: TableCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    res = await db.execute(select(Restaurant).where(Restaurant.id == table_in.restaurant_id))
+    if not res.scalars().first():
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    
+    new_table = Table(**table_in.model_dump())
+    db.add(new_table)
+    await db.commit()
+    await db.refresh(new_table)
+    return new_table
+
+@router.delete("/{table_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_table(
+    table_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    result = await db.execute(select(Table).where(Table.id == table_id))
+    table = result.scalars().first()
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found")
+    
+    await db.delete(table)
+    await db.commit()
+    return None
+
+
+################################################################################
+FILE: routers/order.py
+################################################################################
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
+from typing import List
+
+from models.menu import MenuItem
+from core.database import get_db
+from core.dependencies import RoleChecker, get_current_user
+from models.order import Order, OrderItem, OrderStatus
+from schemas.order import OrderCreate, OrderRead, OrderStatusUpdate
+
+router = APIRouter(prefix="/orders", tags=["orders"])
+
+is_staff = RoleChecker(["admin", "manager", "staff"])
+
+@router.post("/", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
+async def create_order(
+    order_in: OrderCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    new_order = Order(
+        user_id=current_user.id,
+        table_id=order_in.table_id
+    )
+    db.add(new_order)
+    
+    await db.flush()
+
+    for item in order_in.items:
+        res = await db.execute(select(MenuItem).where(MenuItem.id == item.menu_item_id))
+        menu_item = res.scalars().first()
+        
+        if not menu_item:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Блюдо с ID {item.menu_item_id} не найдено"
+            )
+        
+        if not menu_item.is_available:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Блюдо {menu_item.name} сейчас недоступно"
+            )
+
+        order_item = OrderItem(
+            order_id=new_order.id,
+            menu_item_id=menu_item.id,
+            quantity=item.quantity,
+            price_at_order=menu_item.price
+        )
+        db.add(order_item)
+
+    await db.commit()
+    
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == new_order.id)
+    )
+    return result.scalars().first()
+
+@router.get("/my", response_model=List[OrderRead])
+async def get_my_orders(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """История заказов текущего пользователя (Клиента)"""
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.user_id == current_user.id)
+        .order_by(Order.created_at.desc())
+    )
+    return result.scalars().all()
+
+@router.get("/all", response_model=List[OrderRead])
+async def get_all_orders(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    """Список всех заказов для персонала (Админ/Менеджер/Официант)"""
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .order_by(Order.created_at.desc())
+    )
+    return result.scalars().all()
+
+@router.patch("/{order_id}/status", response_model=OrderRead)
+async def update_order_status(
+    order_id: int,
+    status_update: OrderStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    """Изменить статус заказа (Только для персонала)"""
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == order_id)
+    )
+    order = result.scalars().first()
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    order.status = status_update.status
+    await db.commit()
+    await db.refresh(order)
+    return order
+
+
+################################################################################
+FILE: routers/restaurant.py
+################################################################################
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from typing import List
+
+from core.database import get_db
+from core.dependencies import RoleChecker
+from models.restaurant import Restaurant
+from schemas.restaurant import RestaurantCreate, RestaurantRead
+
+router = APIRouter(prefix="/restaurants", tags=["restaurants"])
+
+# Проверки ролей
+is_admin = RoleChecker(["admin"])
+
+@router.get("/", response_model=List[RestaurantRead])
+async def list_restaurants(db: AsyncSession = Depends(get_db)):
+    """Список всех ресторанов (доступно всем)"""
+    result = await db.execute(select(Restaurant))
+    return result.scalars().all()
+
+@router.post("/", response_model=RestaurantRead, status_code=status.HTTP_201_CREATED)
+async def create_restaurant(
+    rest_in: RestaurantCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_admin) # Только админ
+):
+    """Создать новый филиал (Только Админ)"""
+    new_rest = Restaurant(**rest_in.model_dump())
+    db.add(new_rest)
+    await db.commit()
+    await db.refresh(new_rest)
+    return new_rest
+
+@router.get("/{restaurant_id}", response_model=RestaurantRead)
+async def get_restaurant(restaurant_id: int, db: AsyncSession = Depends(get_db)):
+    """Информация о конкретном ресторане"""
+    result = await db.execute(select(Restaurant).where(Restaurant.id == restaurant_id))
+    rest = result.scalars().first()
+    if not rest:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    return rest
+
+@router.delete("/{restaurant_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_restaurant(
+    restaurant_id: int, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_admin)
+):
+    """Удалить филиал (Только Админ)"""
+    result = await db.execute(select(Restaurant).where(Restaurant.id == restaurant_id))
+    rest = result.scalars().first()
+    if not rest:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    
+    await db.delete(rest)
+    await db.commit()
+    return None
+
+
+################################################################################
+FILE: routers/ingredient.py
+################################################################################
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
+from typing import List
+
+from core.database import get_db
+from core.dependencies import RoleChecker
+from models.ingredient import Ingredient, MenuItemIngredient
+from models.menu import MenuItem
+from schemas.ingredient import (
+    IngredientCreate, IngredientRead, 
+    RecipeLinkCreate, RecipeRead
+)
+
+router = APIRouter(prefix="/ingredients", tags=["ingredients"])
+
+is_staff = RoleChecker(["admin", "manager"])
+
+@router.get("/", response_model=List[IngredientRead])
+async def list_ingredients(db: AsyncSession = Depends(get_db)):
+    """Список всех продуктов на складе"""
+    result = await db.execute(select(Ingredient))
+    return result.scalars().all()
+
+@router.post("/", response_model=IngredientRead)
+async def create_ingredient(
+    ing_in: IngredientCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    new_ing = Ingredient(**ing_in.model_dump())
+    db.add(new_ing)
+    await db.commit()
+    await db.refresh(new_ing)
+    return new_ing
+
+
+@router.post("/link-to-menu", status_code=status.HTTP_201_CREATED)
+async def link_ingredient_to_item(
+    link_in: RecipeLinkCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    item = await db.get(MenuItem, link_in.menu_item_id)
+    ing = await db.get(Ingredient, link_in.ingredient_id)
+    
+    if not item or not ing:
+        raise HTTPException(status_code=404, detail="MenuItem or Ingredient not found")
+
+    new_link = MenuItemIngredient(**link_in.model_dump())
+    await db.merge(new_link)
+    await db.commit()
+    return {"message": f"Ingredient {ing.name} linked to {item.name}"}
+
+@router.get("/recipe/{menu_item_id}", response_model=List[RecipeRead])
+async def get_recipe(menu_item_id: int, db: AsyncSession = Depends(get_db)):
+    """Посмотреть состав конкретного блюда"""
+    result = await db.execute(
+        select(MenuItemIngredient)
+        .options(selectinload(MenuItemIngredient.ingredient))
+        .where(MenuItemIngredient.menu_item_id == menu_item_id)
+    )
+    links = result.scalars().all()
+    
+    return [
+        {
+            "ingredient_id": l.ingredient_id,
+            "ingredient_name": l.ingredient.name,
+            "amount": l.amount,
+            "unit": l.ingredient.unit
+        } for l in links
+    ]
+
+
+################################################################################
+FILE: models/menu.py
+################################################################################
+
+from typing import List, Optional
+from sqlalchemy import String, Integer, Float, ForeignKey, Boolean, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from core.database import Base
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    
+    items: Mapped[List["MenuItem"]] = relationship("MenuItem", back_populates="category", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<Category(name={self.name})>"
+
+class MenuItem(Base):
+    __tablename__ = "menu_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    is_available: Mapped[bool] = mapped_column(Boolean, default=True)
+    
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), nullable=False)
+    
+    category: Mapped["Category"] = relationship("Category", back_populates="items")
+
+    def __repr__(self) -> str:
+        return f"<MenuItem(name={self.name}, price={self.price})>"
+    
+    ingredient_links: Mapped[list["MenuItemIngredient"]] = relationship(
+        "MenuItemIngredient", back_populates="menu_item", cascade="all, delete-orphan"
+    )
+
+
+################################################################################
+FILE: models/__init__.py
+################################################################################
+
+from core.database import Base
+from models.user import User, Role
+from models.restaurant import Restaurant, Table
+from models.menu import Category, MenuItem
+from models.ingredient import Ingredient, MenuItemIngredient
+from models.order import Order, OrderItem
+
+
+################################################################################
+FILE: models/user.py
+################################################################################
+
+from datetime import datetime
+from typing import List, Optional
+from sqlalchemy import String, Integer, ForeignKey, Boolean, DateTime, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from core.database import Base
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(200))
+
+    users: Mapped[List["User"]] = relationship("User", back_populates="role")
+
+    def __repr__(self) -> str:
+        return f"<Role(name={self.name})>"
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    email: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    
+    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
+    
+    role: Mapped["Role"] = relationship("Role", back_populates="users")
+
+    def __repr__(self) -> str:
+        return f"<User(username={self.username}, role={self.role_id})>"
+
+
+################################################################################
+FILE: models/order.py
+################################################################################
+
+from datetime import datetime
+from typing import List, Optional
+from sqlalchemy import String, Integer, ForeignKey, DateTime, func, Enum, Float
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from core.database import Base
+import enum
+
+class OrderStatus(enum.Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    
+    status: Mapped[OrderStatus] = mapped_column(
+        Enum(OrderStatus), default=OrderStatus.PENDING
+    )
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    table_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tables.id"), nullable=True)
+
+    user: Mapped["User"] = relationship("User")
+    table: Mapped["Table"] = relationship("Table")
+    items: Mapped[List["OrderItem"]] = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<Order(id={self.id}, status={self.status})>"
+
+class OrderItem(Base):
+    """Конкретные блюда внутри одного заказа"""
+    __tablename__ = "order_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    menu_item_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"), nullable=False)
+    
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    price_at_order: Mapped[float] = mapped_column(Float, nullable=False)
+
+    order: Mapped["Order"] = relationship("Order", back_populates="items")
+    menu_item: Mapped["MenuItem"] = relationship("MenuItem")
+
+    def __repr__(self) -> str:
+        return f"<OrderItem(order_id={self.order_id}, menu_item_id={self.menu_item_id})>"
+
+
+################################################################################
+FILE: models/restaurant.py
+################################################################################
+
+from typing import List
+from sqlalchemy import String, Integer, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from core.database import Base
+
+class Restaurant(Base):
+    __tablename__ = "restaurants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    address: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[str] = mapped_column(String(20), nullable=True)
+
+    # Связь: Один ресторан -> Много столов
+    tables: Mapped[List["Table"]] = relationship("Table", back_populates="restaurant", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<Restaurant(name={self.name})>"
+
+class Table(Base):
+    __tablename__ = "tables"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    number: Mapped[int] = mapped_column(Integer, nullable=False) # Номер стола в заведении
+    capacity: Mapped[int] = mapped_column(Integer, default=2)    # Вместимость (чел)
+    
+    # Внешний ключ на ресторан
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False)
+    
+    # Обратная связь
+    restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="tables")
+
+    def __repr__(self) -> str:
+        return f"<Table(number={self.number}, restaurant_id={self.restaurant_id})>"
+
+
+################################################################################
+FILE: models/ingredient.py
+################################################################################
+
+from sqlalchemy import String, Integer, Float, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from core.database import Base
+
+class MenuItemIngredient(Base):
+    """Промежуточная таблица для рецептов (Many-to-Many с данными)"""
+    __tablename__ = "menu_item_ingredients"
+
+    menu_item_id: Mapped[int] = mapped_column(
+        ForeignKey("menu_items.id", ondelete="CASCADE"), primary_key=True
+    )
+    ingredient_id: Mapped[int] = mapped_column(
+        ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True
+    )
+    # Сколько конкретно этого ингредиента нужно для одного блюда (например, 0.5 кг)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+
+    # Связи для удобного доступа
+    menu_item: Mapped["MenuItem"] = relationship(back_populates="ingredient_links")
+    ingredient: Mapped["Ingredient"] = relationship(back_populates="menu_item_links")
+
+class Ingredient(Base):
+    __tablename__ = "ingredients"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    unit: Mapped[str] = mapped_column(String(20), nullable=False) # г, мл, шт
+    stock_quantity: Mapped[float] = mapped_column(Float, default=0.0) # Остаток на складе
+
+    # Связь с рецептами
+    menu_item_links: Mapped[list["MenuItemIngredient"]] = relationship(
+        back_populates="ingredient"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Ingredient(name={self.name}, stock={self.stock_quantity})>"
+
+
+################################################################################
+FILE: services/export_service.py
+################################################################################
+
+import csv
+import json
+from io import StringIO
+from typing import List, Any
+
+def to_json(data: List[Any]) -> str:
+    return json.dumps(data, indent=4, ensure_ascii=False)
+
+def to_csv(data: List[dict]) -> str:
+    if not data:
+        return ""
+    
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=data[0].keys())
+    writer.writeheader()
+    writer.writerows(data)
+    return output.getvalue()
+
+
+################################################################################
+FILE: services/backup_service.py
+################################################################################
+
+import os
+import subprocess
+from datetime import datetime
+from core.config import settings
+
+def create_db_backup():
+    backup_dir = "backups"
+    if not os.path.exists(backup_dir):
+        os.makedirs(backup_dir)
+
+    db_url = settings.DATABASE_URL.replace("+asyncpg", "")
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(backup_dir, f"backup_{timestamp}.sql")
+    try:
+        command = f"pg_dump {db_url} > {backup_path}"
+        
+        subprocess.run(command, shell=True, check=True)
+        
+        return {
+            "status": "success",
+            "filename": f"backup_{timestamp}.sql",
+            "path": abspath(backup_path),
+            "size_kb": os.path.getsize(backup_path) // 1024
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+def abspath(path):
+    return os.path.abspath(path)
+
