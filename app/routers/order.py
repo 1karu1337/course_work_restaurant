@@ -5,10 +5,9 @@ from sqlalchemy.orm import selectinload
 from typing import List
 
 from core.database import get_db
-from core.dependencies import get_current_user
-from models.order import Order, OrderItem
-from models.menu import MenuItem
-from schemas.order import OrderCreate, OrderRead
+from core.dependencies import get_current_user, RoleChecker
+from models.order import Order, OrderItem, OrderStatus
+from schemas.order import OrderCreate, OrderRead, OrderStatusUpdate
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -58,3 +57,53 @@ async def create_order(
         .where(Order.id == new_order.id)
     )
     return result.scalars().first()
+
+@router.get("/my", response_model=List[OrderRead])
+async def get_my_orders(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """История заказов текущего пользователя (Клиента)"""
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.user_id == current_user.id)
+        .order_by(Order.created_at.desc())
+    )
+    return result.scalars().all()
+
+@router.get("/all", response_model=List[OrderRead])
+async def get_all_orders(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    """Список всех заказов для персонала (Админ/Менеджер/Официант)"""
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .order_by(Order.created_at.desc())
+    )
+    return result.scalars().all()
+
+@router.patch("/{order_id}/status", response_model=OrderRead)
+async def update_order_status(
+    order_id: int,
+    status_update: OrderStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(is_staff)
+):
+    """Изменить статус заказа (Только для персонала)"""
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == order_id)
+    )
+    order = result.scalars().first()
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    order.status = status_update.status
+    await db.commit()
+    await db.refresh(order)
+    return order

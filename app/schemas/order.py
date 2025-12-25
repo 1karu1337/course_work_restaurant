@@ -27,3 +27,6 @@ class OrderRead(BaseModel):
     items: List[OrderItemRead]
 
     model_config = ConfigDict(from_attributes=True)
+
+class OrderStatusUpdate(BaseModel):
+    status: OrderStatus
