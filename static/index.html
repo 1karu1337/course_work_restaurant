@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant OS — Система управления</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        /* Дополнительные стили для быстрого запуска */
+        :root { --primary: #ff4757; --dark: #2f3542; --light: #f1f2f6; --success: #2ed573; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--light); margin: 0; }
+        .container { width: 90%; max-width: 1200px; margin: 0 auto; }
+        header { background: var(--dark); color: white; padding: 1rem 0; position: sticky; top: 0; z-index: 100; }
+        header .container { display: flex; justify-content: space-between; align-items: center; }
+        nav button { background: transparent; color: white; border: 1px solid white; margin-left: 10px; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
+        nav button:hover { background: var(--primary); border-color: var(--primary); }
+        .page { display: none; padding: 30px 0; }
+        .page.active { display: block; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: 0.3s; }
+        .card:hover { transform: translateY(-5px); }
+        .btn-main { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
+        .auth-form { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
+        .auth-form input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
+        .badge { padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; }
+        .status-pending { background: #ffeaa7; color: #d63031; }
+        .status-completed { background: var(--success); color: white; }
+        #admin-panel { background: #dfe4ea; padding: 20px; border-radius: 10px; margin-top: 20px; display: none; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="container">
+        <h2 style="margin:0; cursor:pointer;" onclick="showPage('menu')">🍴 RestoChain</h2>
+        <nav id="main-nav">
+            <button onclick="showPage('menu')">Меню</button>
+            <button onclick="showPage('orders')">Мои Заказы</button>
+            <span id="admin-link"></span> <!-- Для кнопки Админки -->
+            <span id="auth-area"></span>
+        </nav>
+    </div>
+</header>
+
+<div class="container">
+    <!-- Страница МЕНЮ -->
+    <section id="menu-page" class="page active">
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+            <h1>Наше Меню</h1>
+            <div id="cart-info" style="font-weight: bold; color: var(--primary);">Корзина: 0 блюд</div>
+        </div>
+        <div id="menu-grid" class="grid"></div>
+        <div id="order-confirm-bar" style="display:none; text-align: center; margin-top: 40px;">
+            <button class="btn-main" style="width: auto; padding: 15px 50px;" onclick="placeOrder()">Оформить заказ сейчас</button>
+        </div>
+    </section>
+
+    <!-- Страница ЗАКАЗОВ -->
+    <section id="orders-page" class="page">
+        <h1>История заказов</h1>
+        <div id="orders-list"></div>
+    </section>
+
+    <!-- Страница ВХОДА -->
+    <section id="login-page" class="page">
+        <div class="auth-form">
+            <h2>Вход в систему</h2>
+            <form id="login-form">
+                <input type="text" id="username" placeholder="Логин (username)" required>
+                <input type="password" id="password" placeholder="Пароль" required>
+                <button type="submit" class="btn-main">Войти</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- ПАНЕЛЬ АДМИНИСТРАТОРА (Требования №2 и №3) -->
+    <section id="admin-page" class="page">
+        <h1>Панель управления</h1>
+        <div id="admin-panel" style="display: block;">
+            <h3>Экспорт данных (Требование №2)</h3>
+            <button onclick="exportData('json')">Скачать меню (JSON)</button>
+            <button onclick="exportData('csv')">Скачать меню (CSV)</button>
+            
+            <hr>
+            <h3>Резервное копирование (Требование №3)</h3>
+            <button onclick="createBackup()" style="background: var(--dark);">Создать бэкап БД (.sql)</button>
+            <p id="backup-status" style="font-size: 0.9rem; color: #666;"></p>
+        </div>
+    </section>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
