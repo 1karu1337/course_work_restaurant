@@ -1,6 +1,6 @@
 from sqlalchemy import String, Integer, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.core.database import Base
+from core.database import Base
 
 class MenuItemIngredient(Base):
     """Промежуточная таблица для рецептов (Many-to-Many с данными)"""

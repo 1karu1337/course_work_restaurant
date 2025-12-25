@@ -1,7 +1,7 @@
 from typing import List, Optional
 from sqlalchemy import String, Integer, Float, ForeignKey, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.core.database import Base
+from core.database import Base
 
 class Category(Base):
     __tablename__ = "categories"
